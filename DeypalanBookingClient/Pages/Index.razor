@@ -1,0 +1,293 @@
+﻿@page "/"
+@using DeypalanBookingClient.Models
+@using System.Net.Http
+@using System.Net.Http.Json
+@using System.Net.Http.Headers
+@inject IJSRuntime JSRuntime
+@inject ILocalStorageService localStorage
+@using BlazorCaptcha
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService dialog
+@inject NavigationManager NavigationManager
+
+<div>
+    <img src="logo.png" style="width:150px; height:150px;" /> <p1 style="font-size: 30px; font-family:Tahoma">DEYPALAN</p1>
+</div>
+
+<br />
+<div class="card">
+    <div class="card-body">
+
+        <MudTextField @bind-Value="@_client.name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense"></MudTextField> <br />
+        <MudTextField @bind-Value="@_client.address" Label="Address" Variant="Variant.Outlined" Margin="Margin.Dense"></MudTextField><br />
+
+        <MudSelect @bind-Value="@_client.gender" Margin="Margin.Dense" T="string" Label="Gender" Variant="Variant.Outlined">
+            <MudSelectItem Value="@("Male")" />
+            <MudSelectItem Value="@("Female")" />
+        </MudSelect><br />
+
+        <MudTextField @bind-Value="@_client.contact" Label="Contact" Variant="Variant.Outlined" Margin="Margin.Dense"></MudTextField><br />
+
+        <MudAutocomplete Clearable T="services" Label="Search Services" @bind-Value="xservices" Variant="Variant.Outlined" Margin="Margin.Dense"
+                         SearchFunc="@Search" ToStringFunc="@(e=> e==null?null : $"{e.service}")" Strict="false">
+        </MudAutocomplete><br />
+
+        @if (hide)
+        {
+            <MudTextField @bind-Value="@xservices.serviceid" Label="Contact" Variant="Variant.Outlined" Margin="Margin.Dense"></MudTextField>
+            <MudTextField @bind-Value="@xservices.service" Label="Contact" Variant="Variant.Outlined" Margin="Margin.Dense"></MudTextField>
+        }
+
+        <MudTextField @bind-Value="@_client.sched" Label="Date" Variant="Variant.Outlined" Margin="Margin.Dense" InputType="InputType.Date" Format="yyyy-MM-dd"></MudTextField><br />
+        @if (hide)
+        {
+            <MudSelect @bind-Value="@_client.status" Margin="Margin.Dense" T="string" Label="Status" Variant="Variant.Outlined">
+                <MudSelectItem Value="@("NEW")" />
+                <MudSelectItem Value="@("APPROVED")" />
+                <MudSelectItem Value="@("RELEASED")" />
+            </MudSelect>
+
+        }
+       
+        <Captcha @bind-CaptchaWord="@Captcha" CharNumber="@CaptchaLetters" Height="50"/> <br />
+        <MudTextField @bind-Value="@_client.captcha" Label="Enter Captcha" Variant="Variant.Outlined" Margin="Margin.Dense"></MudTextField><br />
+
+        <span class="text-danger">@Validation</span>
+        <br /><br />
+        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="@Save">Book Now</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@Clear">clear</MudButton>
+    </div>
+</div>
+
+@code
+{
+    private services xservices { get; set; } = new services();
+    private async Task<IEnumerable<services>> Search(string value)
+    {
+
+        HttpClient httpClient = new HttpClient();
+        httpClient.BaseAddress = new Uri($"https://7n64m6cd-7140.asse.devtunnels.ms/");
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+        var residents = await httpClient.GetFromJsonAsync<List<services>>($"api/ServicesOffered/SearchServices?search={value}");
+        return residents;
+    }
+
+    bool hide = false;
+    private IEnumerable<services> options { get; set; } = new HashSet<services>();
+    private services[] _services;
+
+
+    DateTime? _date = DateTime.Today;
+    [Parameter] public availdate _availdate { get; set; } = new availdate();
+    availdate xavaildate = new();
+    availdate[]? availdatelist;
+
+    bool fixed_header = true;
+    bool fixed_footer = false;
+
+    private string GetStatusColor(string status)
+    {
+        if (status == "AVAILABLE")
+        {
+            return "bg-success";
+        }
+        else if (status == "UNAVAILABLE")
+        {
+            return "bg-danger";
+        }
+        return "";
+    }
+
+    public async Task GetDate()
+    {
+
+        try
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri($"https://7n64m6cd-7140.asse.devtunnels.ms/");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+                HttpResponseMessage response = await client.GetAsync($"api/AvailDate/AvailDate");
+                if (response.IsSuccessStatusCode)
+                {
+                    string contentrespose = await response.Content.ReadAsStringAsync();
+                    availdatelist = JsonConvert.DeserializeObject<availdate[]>(contentrespose);
+                    await InvokeAsync(() => StateHasChanged());
+                }
+                else
+                {
+                    Snackbar.Configuration.PositionClass = "Center";
+                    Snackbar.Add($"Warning: {response.StatusCode}", Severity.Warning);
+                    await InvokeAsync(() => StateHasChanged());
+                }
+
+            }
+        }
+        catch (Exception ex)
+        {
+        //
+        }
+
+    }
+
+
+
+
+    private async Task SearchDate()
+    {
+
+        using (HttpClient client = new HttpClient())
+        {
+            client.BaseAddress = new Uri($"https://7n64m6cd-7140.asse.devtunnels.ms/");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+            HttpResponseMessage response = await client.GetAsync($"api/AvailDate/SearchScheduleDate?date={_date.Value:yyyy-MM-dd}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                string contentrespose = await response.Content.ReadAsStringAsync();
+                availdatelist = JsonConvert.DeserializeObject<availdate[]>(contentrespose);
+                StateHasChanged();
+            }
+            else
+            {
+                Snackbar.Add($"Warning: {response.StatusCode}", Severity.Warning);
+            }
+        }
+    }
+
+
+
+    private string Validation = "";
+    private string Captcha = "";
+    private int CaptchaLetters = 5;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri($"https://7n64m6cd-7140.asse.devtunnels.ms/");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+                HttpResponseMessage response = await client.GetAsync($"api/ServicesOffered/Services");
+                if (response.IsSuccessStatusCode)
+                {
+                    string contentrespose = await response.Content.ReadAsStringAsync();
+                    _services = JsonConvert.DeserializeObject<services[]>(contentrespose);
+                    await InvokeAsync(() => StateHasChanged());
+                }
+                else
+                {
+                    Snackbar.Add($"Warning: {response.StatusCode}", Severity.Warning);
+                    await InvokeAsync(() => StateHasChanged());
+                }
+
+            }
+        }
+        catch (Exception ex)
+        {
+        //
+        }
+
+        Captcha = BlazorCaptcha.Tools.GetCaptchaWord(CaptchaLetters);
+    }
+
+    private clients _client { get; set; } = new clients();
+
+    private async Task ShowAlertAsync(string message)
+    {
+        await JSRuntime.InvokeVoidAsync("alert", message);
+    }
+
+    async Task Clear()
+    {
+        _client.name = "";
+        _client.address = "";
+        //_client.age = "";
+        _client.gender = "";
+        //_client.occupation = "";
+        _client.contact = "";
+        _client.service = "";
+        _client.captcha = "";
+
+    }
+
+    async Task Save()
+    {
+        bool? result = await dialog.ShowMessageBox(
+        "Submit?",
+        "Make Sure All Details Provided Are Correct",
+        yesText: "Submit", cancelText: "Cancel");
+        if (result ?? false)
+        {
+
+            if (_client.captcha == Captcha)
+            {
+                Validation = "";
+
+                int i = 0;
+                try
+                {
+                    var xclient = new clients
+                        {
+                            client_id = _client.client_id,
+                            name = _client.name,
+                            address = _client.address,
+                            gender = _client.gender,
+                            contact = _client.contact,
+                            serviceid = xservices.serviceid,
+                            service = xservices.service,
+                            sched = _client.sched,
+                            status = _client.status = "NEW"
+
+                        };
+
+                    using (HttpClient client = new HttpClient())
+                    {
+                        client.BaseAddress = new Uri($"https://7n64m6cd-7140.asse.devtunnels.ms/");
+                        var json = JsonConvert.SerializeObject(xclient);
+                        HttpContent content = new StringContent(json);
+                        content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+                        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+                        HttpResponseMessage response = await client.PostAsync($"api/Client/AddClient", content);
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            string contentresponse = await response.Content.ReadAsStringAsync();
+                            i = JsonConvert.DeserializeObject<int>(contentresponse);
+                            if (i > 0)
+                            {
+                                Snackbar.Configuration.PositionClass = "Center";
+                                await ShowAlertAsync("Successfully Saved");
+                                await InvokeAsync(StateHasChanged);
+                                await Clear();
+
+                            }
+                        }
+                        else
+                        {
+                            await ShowAlertAsync("Transaction failed.");
+
+                        }
+
+                    }
+                }
+                catch (Exception)
+                {
+
+
+
+                }
+        }
+        else
+        {
+            Validation = "Invalid Captcha";
+        }
+
+
+    }
+
+  }
+}

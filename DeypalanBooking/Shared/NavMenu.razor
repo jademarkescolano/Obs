@@ -1,0 +1,42 @@
+﻿<div class="@NavMenuCssClass nav" @onclick="ToggleNavMenu">
+    <nav class="flex-column">
+        <br />
+        <MudListItem>
+            <MudNavLink Href="dashboard" Icon="@Icons.Material.Filled.DashboardCustomize" style="text-decoration: none">
+                Dashboard
+            </MudNavLink>
+        </MudListItem>
+        <MudListItem>
+            <MudNavLink Href="client" Icon="@Icons.Material.Filled.List" style="text-decoration: none">
+                Client Record
+            </MudNavLink>
+        </MudListItem>
+        <MudListItem>
+            <MudNavLink Href="services" Icon="@Icons.Material.Filled.DesignServices" style="text-decoration: none">
+                Services
+            </MudNavLink>
+        </MudListItem>
+        <MudListItem>
+            <MudNavLink Href="availdate" Icon="@Icons.Material.Filled.DateRange" style="text-decoration: none">
+                Available Date
+            </MudNavLink>
+        </MudListItem>
+    </nav>
+</div>
+
+<style>
+    .nav a {
+        text-decoration: none;
+    }
+</style>
+@code {
+    private bool collapseNavMenu = true;
+    private bool expandSubMenu;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}

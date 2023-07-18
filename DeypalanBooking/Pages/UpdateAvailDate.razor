@@ -1,0 +1,89 @@
+﻿@using DeypalanBooking.Models;
+@using System.Net.Http
+@using System.Net.Http.Json
+@using System.Net.Http.Headers
+@inject ILocalStorageService localStorage
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="@_availdate.date" Label="Date" Variant="Variant.Text" Margin="Margin.Dense" InputType="InputType.Date" Format="yyyy-MM-dd"></MudTextField>
+        <MudSelect @bind-Value="@_availdate.status" Margin="Margin.Dense" T="string" Label="Status" Variant="Variant.Text">
+            <MudSelectItem Value="@("AVAILABLE")" />
+            <MudSelectItem Value="@("UNAVAILABLE")" />
+        </MudSelect>
+
+        <MudToolBar>
+            <MudSpacer />
+            <MudButton Variant="Variant.Filled" Size="MudBlazor.Size.Medium" Color="Color.Primary" @onclick="Close">Close</MudButton> &nbsp;
+            <MudButton Variant="Variant.Filled" Size="MudBlazor.Size.Medium" Color="Color.Tertiary" @onclick="Save">Save</MudButton>
+        </MudToolBar>
+
+    </DialogContent>
+</MudDialog>
+
+@code
+{
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+    [Parameter] public availdate _availdate { get; set; } = new availdate();
+    availdate[]? availdatelist;
+
+    private async Task ShowAlertAsync(string message)
+    {
+        await JSRuntime.InvokeVoidAsync("alert", message);
+    }
+
+    private void Close()
+    {
+        MudDialog.Cancel();
+    }
+    async Task Save()
+    {
+        int i = 0;
+        try
+        {
+            var xavaildate = new availdate
+                {
+                    id = _availdate.id,
+                    date = _availdate.date,
+                    status = _availdate.status
+                };
+
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri($"{NavigationManager.BaseUri}");
+                var json = JsonConvert.SerializeObject(xavaildate);
+                HttpContent content = new StringContent(json);
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+                HttpResponseMessage response = await client.PostAsync($"api/AvailDate/UpdateAvailDate", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    string contentresponse = await response.Content.ReadAsStringAsync();
+                    i = JsonConvert.DeserializeObject<int>(contentresponse);
+                    if (i > 0)
+                    {
+                        Snackbar.Configuration.PositionClass = "Center";
+                        Snackbar.Add($"Done: Successfully Updated!", Severity.Success);
+                        await InvokeAsync(StateHasChanged);
+                        MudDialog.Close();
+                    }
+                }
+                else
+                {
+                    await ShowAlertAsync("Transaction failed.");
+                }
+
+            }
+        }
+        catch (Exception)
+        {
+
+        }
+    }
+}

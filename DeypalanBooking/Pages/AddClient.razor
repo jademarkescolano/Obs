@@ -1,0 +1,141 @@
+﻿@using DeypalanBooking.Models;
+@using System.Net.Http
+@using System.Net.Http.Json
+@using System.Net.Http.Headers
+@inject ILocalStorageService localStorage
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="@_client.name" Label="Name" Variant="Variant.Text" Margin="Margin.Dense"></MudTextField>
+        <MudTextField @bind-Value="@_client.address" Label="Address" Variant="Variant.Text" Margin="Margin.Dense"></MudTextField>
+      
+        <MudSelect @bind-Value="@_client.gender" Margin="Margin.Dense" T="string" Label="Gender" Variant="Variant.Text">
+            <MudSelectItem Value="@("Male")" />
+            <MudSelectItem Value="@("Female")" />
+        </MudSelect>
+     
+        <MudTextField @bind-Value="@_client.contact" Label="Contact" Variant="Variant.Text" Margin="Margin.Dense"></MudTextField>
+
+        <MudAutocomplete Clearable T="services" Label="Search Services" @bind-Value="xservices" Variant="Variant.Text" Margin="Margin.Dense"
+                         SearchFunc="@Search" ToStringFunc="@(e=> e==null?null : $"{e.service}")" Strict="false">
+        </MudAutocomplete>
+
+        @if (hide)
+        {
+            <MudTextField @bind-Value="@xservices.serviceid" Label="Contact" Variant="Variant.Text" Margin="Margin.Dense"></MudTextField>
+            <MudTextField @bind-Value="@xservices.service" Label="Contact" Variant="Variant.Text" Margin="Margin.Dense"></MudTextField>
+        }
+
+        <MudTextField @bind-Value="@_client.sched" Label="Date" Variant="Variant.Text" Margin="Margin.Dense" InputType="InputType.Date" Format="yyyy-MM-dd"></MudTextField>
+        <MudSelect @bind-Value="@_client.status" Margin="Margin.Dense" T="string" Label="Status" Variant="Variant.Text">
+            <MudSelectItem Value="@("NEW")" />
+            <MudSelectItem Value="@("APPROVED")" />
+            <MudSelectItem Value="@("RELEASED")" />
+        </MudSelect>  <br />
+      <MudToolBar>
+          <MudSpacer/>
+            <MudButton Variant="Variant.Filled" Size="MudBlazor.Size.Medium" Color="Color.Primary" @onclick="Close">Close</MudButton> &nbsp;
+            <MudButton Variant="Variant.Filled" Size="MudBlazor.Size.Medium" Color="Color.Tertiary" @onclick="Save">Save</MudButton>
+      </MudToolBar>
+
+    </DialogContent>
+</MudDialog>
+
+@code
+{
+    bool hide = false;
+    private IEnumerable<services> options
+    { get; set; } = new HashSet<services>();
+    private services[] _services;
+
+
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+    [Parameter] public clients _client { get; set; } = new clients();
+    clients[]? clientlist;
+    private services xservices { get; set; } = new services();
+
+    private async Task ShowAlertAsync(string message)
+    {
+        await JSRuntime.InvokeVoidAsync("alert", message);
+    }
+
+    private async Task<IEnumerable<services>> Search(string value)
+    {
+
+        HttpClient httpClient = new HttpClient();
+        httpClient.BaseAddress = new Uri($"{NavigationManager.BaseUri}");
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+        var residents = await httpClient.GetFromJsonAsync<List<services>>($"api/ServicesOffered/SearchServices?search={value}");
+        return residents;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+       
+    }
+
+
+    private void Close()
+    {
+        MudDialog.Cancel();
+    }
+    async Task Save()
+    {
+        int i = 0;
+        try
+        {
+            var xclient = new clients
+                {
+                    client_id = _client.client_id,
+                    name = _client.name,
+                    address = _client.address,
+                    gender = _client.gender,
+                    contact = _client.contact,
+                    serviceid = xservices.serviceid,
+                    service = xservices.service,
+                    sched = _client.sched,
+                    status = _client.status
+
+                };
+
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri($"{NavigationManager.BaseUri}");
+                var json = JsonConvert.SerializeObject(xclient);
+                HttpContent content = new StringContent(json);
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+                HttpResponseMessage response = await client.PostAsync($"api/Client/AddClient", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    string contentresponse = await response.Content.ReadAsStringAsync();
+                    i = JsonConvert.DeserializeObject<int>(contentresponse);
+                    if (i > 0)
+                    {
+                        Snackbar.Configuration.PositionClass = "Center";
+                        Snackbar.Add($"Done: Successfully Saved!", Severity.Success);
+                        await InvokeAsync(StateHasChanged);
+                        MudDialog.Close();
+                    }
+                }
+                else
+                {
+                    await ShowAlertAsync("Transaction failed.");
+                }
+
+            }
+        }
+        catch (Exception)
+        {
+
+
+
+        }
+    }
+}

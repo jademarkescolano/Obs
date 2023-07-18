@@ -1,0 +1,386 @@
+﻿@page "/dashboard"
+@using DeypalanBooking.Models;
+@using System.Net.Http
+@using System.Net.Http.Json
+@using System.Net.Http.Headers
+@inject ILocalStorageService localStorage
+@inject HttpClient Http
+@inject IJSRuntime IJS
+@using Microsoft.AspNetCore.SignalR.Client;
+@inject NavigationManager NavigationManager
+@inject IDialogService Dialog
+@inject ISnackbar Snackbar
+
+<PageTitle>Dashboard</PageTitle>
+<br /> <br />
+<MudContainer>
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="6">
+            <MudCard Elevation="3">
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Bookmark" Size="MudBlazor.Size.Large" />
+                        </MudItem>
+                        <MudItem xs="10">
+                            <MudText Typo="Typo.h6">New</MudText>
+                      <MudFab  Label="@TotalNew.ToString()"  OnClick="@((e) => NewClient(maxWidth))" />
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+
+        <MudItem xs="12" sm="6" md="6">
+            <MudCard Elevation="3">
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Bookmark" Size="MudBlazor.Size.Large" />
+                        </MudItem>
+                        <MudItem xs="10">
+                            <MudText Typo="Typo.h6">Approved</MudText>
+                           <MudFab Label="@TotalApproved.ToString()" OnClick="@((e) => ApprovedClient(maxWidth))" />
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <br />
+
+        <MudItem xs="12" sm="6" md="6">
+            <MudCard Elevation="3">
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Bookmark" Size="MudBlazor.Size.Large" />
+                        </MudItem>
+                        <MudItem xs="10">
+                            <MudText Typo="Typo.h6">Released</MudText>
+                           <MudFab Label="@TotalReleased.ToString()" OnClick="@((e) => ReleasedClient(maxWidth))" />
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+          <MudItem xs="12" sm="6" md="6">
+            <MudCard Elevation="3">
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Bookmark" Size="MudBlazor.Size.Large" />
+                        </MudItem>
+                        <MudItem xs="10">
+                            <MudText Typo="Typo.h6">Declined</MudText>
+                           <MudFab Label="@TotalDeclined.ToString()"  OnClick="@((e) => DeclinedClient(maxWidth))" />
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+</MudGrid>
+</MudContainer>
+
+<br />
+<MudPaper Elevation="1" Class="p-4 mb-4">
+    <MudGrid>
+        <MudItem xs="1">
+            <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="MudBlazor.Size.Large" />
+        </MudItem>
+        <MudItem xs="11">
+            <MudText Typo="Typo.h5" Style="font-family:Tahoma">Today's Schedule</MudText>
+        </MudItem>
+    </MudGrid>
+</MudPaper> <br />
+
+<MudTable Class="ma-5" Dense="true" Hover="true" Items="@clientlist"
+          FixedHeader="@fixed_header" FixedFooter="@fixed_footer"
+          Height="@(fixed_header || fixed_footer ?"500px": "")">
+
+    <HeaderContent>
+        <MudTh>ID #</MudTh>
+        <MudTh>Name</MudTh>
+        <MudTh>Address</MudTh>
+        <MudTh>Contact</MudTh>
+        <MudTh>Service</MudTh>
+        <MudTh>Date</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+
+    <RowTemplate>
+        <MudTd DataLabel="ID #">@context.client_id</MudTd>
+        <MudTd DataLabel="Name">@context.name</MudTd>
+        <MudTd DataLabel="Address">@context.address</MudTd>
+        <MudTd DataLabel="Contact">@context.contact</MudTd>
+        <MudTd DataLabel="Service">@context.service</MudTd>
+        <MudTd DataLabel="Date">@context.sched.ToString("dd/MM/yyyy")</MudTd>
+       <MudTd DataLabel="Status" Style="color: white">
+            <span class="@GetStatusColor(context.status)">@context.status</span>
+        </MudTd>
+         <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" aria-label="edit" Class="btn2" Size="MudBlazor.Size.Small"
+                           Variant="Variant.Outlined" Color="Color.Primary" @onclick="(e => Edit(context.client_id))"></MudIconButton>
+        </MudTd>
+    </RowTemplate>
+
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[]{10, 20, 50, 100, 200}" />
+    </PagerContent>
+</MudTable>
+
+<style>
+    .btn2 {
+        padding: 0em;
+        margin-left: -40px;
+    }
+</Style>
+
+@code
+{
+    private string GetStatusColor(string status)
+    {
+        if (status == "NEW")
+        {
+            return "bg-primary";
+        }
+        else if (status == "APPROVED")
+        {
+            return "bg-success";
+        }
+        else if (status == "DECLINED")
+        {
+            return "bg-secondary";
+        }
+        else if (status == "RELEASED")
+        {
+            return "bg-info";
+        }
+        return "";
+    }
+
+    DialogOptions maxWidth = new DialogOptions() 
+    { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true };
+
+    clients xclient = new();
+    clients[]? clientlist;
+    int TotalNew;
+    int TotalApproved;
+    int TotalReleased;
+    int TotalDeclined;
+
+    bool fixed_header = true;
+    bool fixed_footer = false;
+
+    //SignalR
+    private HubConnection? hubConnection;
+
+    protected async override Task OnInitializedAsync()
+    {
+        await New();
+        await Approved();
+        await Released();
+        await Declined();
+
+        //SignalR
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/hub"))
+            .Build();
+
+        hubConnection.On("client", async () =>
+       {
+           await Task.Delay(2000);
+           await GetClient();
+           await New();
+           await Approved();
+           await Released();
+           await Declined();
+           StateHasChanged();
+       });
+        await hubConnection.StartAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await GetClient();
+            await InvokeAsync(() => StateHasChanged());
+        }
+    } 
+
+    private void NewClient(DialogOptions options)
+    {
+        Dialog.Show<New>("New Client", options);
+    }
+
+    private void ApprovedClient(DialogOptions options)
+    {
+        Dialog.Show<Approved>("Approved Client", options);
+    }
+
+    private void ReleasedClient(DialogOptions options)
+    {
+        Dialog.Show<Released>("Released Client", options);
+    }
+
+      private void DeclinedClient(DialogOptions options)
+    {
+        Dialog.Show<Declined>("Declined Client", options);
+    }
+
+    [Parameter] public services xservices { get; set; } = new services();
+    public async Task Edit(int id)
+    {
+         clients[]? xclient;
+        var clients = from s in clientlist where s.client_id == id select s;
+        xclient = clients.ToArray();
+
+        xservices.service = xclient[0].service;
+        xservices.serviceid = xclient[0].serviceid;
+        var parameters = new DialogParameters();
+
+        var updateClearance = clientlist.FirstOrDefault(_ => _.client_id == id);
+        parameters.Add("_client", updateClearance);
+        parameters.Add("xservices", xservices);
+        var dialog = Dialog.Show<ReleaseClient>("Decline Client?", parameters);
+        var result = await dialog.Result;
+    }
+
+    public async Task GetClient()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.SendAsync("SendClient");
+        }
+        try
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri($"{NavigationManager.BaseUri}");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+                HttpResponseMessage response = await client.GetAsync($"api/Client/SchedToday");
+                if (response.IsSuccessStatusCode)
+                {
+                    string contentrespose = await response.Content.ReadAsStringAsync();
+                    clientlist = JsonConvert.DeserializeObject<clients[]>(contentrespose);
+                    await InvokeAsync(() => StateHasChanged());
+                }
+                else
+                {
+                     Snackbar.Configuration.PositionClass = "Center";
+                    Snackbar.Add($"Warning: {response.StatusCode}", Severity.Warning);
+                    await InvokeAsync(() => StateHasChanged());
+                }
+
+            }
+        }
+        catch (Exception ex)
+        {
+        //
+        }
+    }
+
+    public async Task New()
+    {
+          if (hubConnection is not null)
+        {
+            await hubConnection.SendAsync("SendClient");
+        }
+        using (HttpClient client = new HttpClient())
+        {
+            client.BaseAddress = new Uri($"{NavigationManager.BaseUri}");
+            HttpResponseMessage response = await client.GetAsync($"api/Client/New");
+            if (response.IsSuccessStatusCode)
+            {
+                string contentResponse = await response.Content.ReadAsStringAsync();
+                TotalNew = JsonConvert.DeserializeObject<int>(contentResponse);
+                StateHasChanged();
+            }
+            else
+            {
+                 Snackbar.Configuration.PositionClass = "Center";
+                Snackbar.Add($"Warning: {response.StatusCode}", Severity.Warning);
+                StateHasChanged();
+            }
+        }
+    }
+
+    public async Task Approved()
+    {
+          if (hubConnection is not null)
+        {
+            await hubConnection.SendAsync("SendClient");
+        }
+        using (HttpClient client = new HttpClient())
+        {
+            client.BaseAddress = new Uri($"{NavigationManager.BaseUri}");
+            HttpResponseMessage response = await client.GetAsync($"api/Client/Approved");
+            if (response.IsSuccessStatusCode)
+            {
+                string contentResponse = await response.Content.ReadAsStringAsync();
+                TotalApproved = JsonConvert.DeserializeObject<int>(contentResponse);
+                StateHasChanged();
+            }
+            else
+            {
+                 Snackbar.Configuration.PositionClass = "Center";
+                Snackbar.Add($"Warning: {response.StatusCode}", Severity.Warning);
+                StateHasChanged();
+            }
+        }
+    }
+    public async Task Released()
+    {
+          if (hubConnection is not null)
+        {
+            await hubConnection.SendAsync("SendClient");
+        }
+        using (HttpClient client = new HttpClient())
+        {
+            client.BaseAddress = new Uri($"{NavigationManager.BaseUri}");
+            HttpResponseMessage response = await client.GetAsync($"api/Client/Released");
+            if (response.IsSuccessStatusCode)
+            {
+                string contentResponse = await response.Content.ReadAsStringAsync();
+                TotalReleased = JsonConvert.DeserializeObject<int>(contentResponse);
+                StateHasChanged();
+            }
+            else
+            {
+                 Snackbar.Configuration.PositionClass = "Center";
+                Snackbar.Add($"Warning: {response.StatusCode}", Severity.Warning);
+                StateHasChanged();
+            }
+        }
+    }
+        public async Task Declined()
+        {
+              if (hubConnection is not null)
+        {
+            await hubConnection.SendAsync("SendClient");
+        }
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri($"{NavigationManager.BaseUri}");
+                HttpResponseMessage response = await client.GetAsync($"api/Client/Declined");
+                if (response.IsSuccessStatusCode)
+                {
+                    string contentResponse = await response.Content.ReadAsStringAsync();
+                    TotalDeclined = JsonConvert.DeserializeObject<int>(contentResponse);
+                    StateHasChanged();
+                }
+                else
+                {
+                     Snackbar.Configuration.PositionClass = "Center";
+                    Snackbar.Add($"Warning: {response.StatusCode}", Severity.Warning);
+                    StateHasChanged();
+                }
+            }
+
+        }
+}

@@ -1,0 +1,293 @@
+﻿@page "/client"
+@using DeypalanBooking.Models;
+@using System.Net.Http
+@using System.Net.Http.Json
+@using System.Net.Http.Headers
+@inject ILocalStorageService localStorage
+@inject HttpClient Http
+@inject IJSRuntime IJS
+@using Microsoft.AspNetCore.SignalR.Client;
+@inject NavigationManager NavigationManager
+@inject IDialogService Dialog
+@inject ISnackbar Snackbar
+
+<PageTitle>Clients Record</PageTitle>
+
+<br />
+<MudToolBar>
+    <MudSpacer />
+    <MudDateRangePicker @ref="_picker" PickerVariant="PickerVariant.Dialog" Variant="Variant.Outlined" Margin="MudBlazor.Margin.Dense" DateRange="_dateRange" DateRangeChanged="@(value =>
+            { _dateRange = value; SearchDate(); })" DateFormat="yyyy-MM-dd" Style="display:none" />
+
+    <MudFab StartIcon="@Icons.Material.Filled.DateRange" Size="MudBlazor.Size.Small" @onclick="OpenDateRange" />
+    &nbsp;&nbsp;
+    <MudButton @onclick="Excel" Color="Color.Tertiary">Export To Excel</MudButton>
+
+
+</MudToolBar>
+<MudContainer Class="d-flex justify-start mb-2">
+    <MudButton Variant="Variant.Filled" Size="MudBlazor.Size.Medium" Color="Color.Primary" @onclick="Refresh">Refresh</MudButton> &nbsp;&nbsp;
+    <MudButton Variant="Variant.Filled" Size="MudBlazor.Size.Medium" Color="Color.Tertiary" @onclick="(e => Add())">Add New</MudButton>
+    <MudSpacer />  <MudSpacer />  <MudSpacer />
+    <MudTextField @bind-Value="txtsearch"
+                    Clearable
+                  TextChanged="@Search"
+                  Adornment="Adornment.End"
+                  AdornmentIcon="@Icons.Material.Filled.Search"
+                  Label="Search"
+                  Variant="Variant.Outlined"
+                  Margin="Margin.Dense"
+                  Class="xsearch">
+    </MudTextField>
+</MudContainer>
+
+<MudTable Class="ma-5" Dense="true" Hover="true" Items="@clientlist"
+          FixedHeader="@fixed_header" FixedFooter="@fixed_footer"
+          Height="@(fixed_header || fixed_footer ?"500px": "")">
+
+    <HeaderContent>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<clients, object>(c => c.sched)" InitialDirection="SortDirection.Descending">
+                Schedule Date
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>Name</MudTh>
+        <MudTh>Address</MudTh>
+        <MudTh>Contact</MudTh>
+        <MudTh>Service</MudTh>
+       
+        <MudTh>Status</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+
+    <RowTemplate>
+        <MudTd DataLabel="Date">@context.sched.ToString("dd/MM/yyyy")</MudTd>
+        <MudTd DataLabel="Name">@context.name</MudTd>
+        <MudTd DataLabel="Address">@context.address</MudTd>
+        <MudTd DataLabel="Contact">@context.contact</MudTd>
+        <MudTd DataLabel="Service">@context.service</MudTd>
+      
+        <MudTd DataLabel="Status" Style="color: white">
+            <span class="@GetStatusColor(context.status)">@context.status</span>
+        </MudTd>
+        <MudTd><MudFab Color="Color.Primary" @onclick="(e => Edit(context.client_id))" Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit" /></MudTd>
+    </RowTemplate>
+
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[]{10, 20, 50, 100, 200}" />
+    </PagerContent>
+</MudTable>
+
+
+
+
+@code {
+
+    private MudDateRangePicker? _picker;
+    private MudBlazor.DateRange _dateRange = new MudBlazor.DateRange();
+
+    async Task OpenDateRange()
+    {
+        _picker?.Open();
+    }
+
+    private async Task Excel()
+    {
+        if (_dateRange.Start == null || _dateRange.End == null)
+        {
+
+            Snackbar.Add($"Warning: Start or end date not set!", Severity.Warning);
+        }
+        else
+        {
+
+            NavigationManager.NavigateTo($"{NavigationManager.BaseUri}api/Client/ClientReport?start={_dateRange.Start.Value:yyyy-MM-dd}&end={_dateRange.End.Value:yyyy-MM-dd}", true);
+        }
+    }
+    private async Task SearchDate()
+    {
+        await hubConnection.StopAsync();
+
+        using (HttpClient client = new HttpClient())
+        {
+            client.BaseAddress = new Uri($"{NavigationManager.BaseUri}");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+            HttpResponseMessage response = await client.GetAsync($"api/Client/SearchDateClients?start={_dateRange.Start.Value:yyyy-MM-dd}&end={_dateRange.End.Value:yyyy-MM-dd}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                string contentrespose = await response.Content.ReadAsStringAsync();
+                clientlist = JsonConvert.DeserializeObject<clients[]>(contentrespose);
+                StateHasChanged();
+            }
+            else
+            {
+                Snackbar.Add($"Warning: {response.StatusCode}", Severity.Warning);
+            }
+        }
+    }
+
+    private string GetStatusColor(string status)
+    {
+        if (status == "NEW")
+        {
+            return "bg-primary";
+        }
+        else if (status == "APPROVED")
+        {
+            return "bg-success";
+        }
+        else if (status == "DECLINED")
+        {
+            return "bg-secondary";
+        }
+        else if (status == "RELEASED")
+        {
+            return "bg-info";
+        }
+        return "";
+    }
+
+    public string? txtsearch { get; set; }
+    DateTime? date = DateTime.Today;
+    [Parameter] public clients _client { get; set; } = new clients();
+    clients xclient = new();
+    clients[]? clientlist;
+
+    bool fixed_header = true;
+    bool fixed_footer = false;
+
+    protected HubConnection hubConnection;
+    protected async override Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/hub"))
+            .Build();
+
+        hubConnection.On("client", async () =>
+        {
+            await Task.Delay(2000);
+            await GetClient();
+            StateHasChanged();
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    private async Task Refresh()
+    {
+        if (hubConnection.State == HubConnectionState.Disconnected)
+        {
+            await hubConnection.StartAsync();
+        }
+        await GetClient();
+    }
+
+    [Parameter] public services xservices { get; set; } = new services();
+
+    private async Task Edit(int id)
+    {
+        clients[]? xclient;
+        var clients = from s in clientlist where s.client_id == id select s;
+        xclient = clients.ToArray();
+
+        xservices.service = xclient[0].service;
+        xservices.serviceid = xclient[0].serviceid;
+        var parameters = new DialogParameters();
+
+        var updateClearance = clientlist.FirstOrDefault(_ => _.client_id == id);
+        parameters.Add("_client", updateClearance);
+        parameters.Add("xservices", xservices);
+        var dialog = Dialog.Show<UpdateClient>("Approve Client?", parameters);
+        var result = await dialog.Result;
+    }
+
+
+    private async Task Search()
+    {
+
+
+        if (string.IsNullOrWhiteSpace(txtsearch))
+        {
+
+            StateHasChanged();
+            return;
+        }
+        else
+        {
+            await hubConnection.StopAsync();
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri($"{NavigationManager.BaseUri}");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+                HttpResponseMessage response = await client.GetAsync($"api/Client/SearchClient?search={txtsearch}");
+                if (response.IsSuccessStatusCode)
+                {
+                    string contentrespose = await response.Content.ReadAsStringAsync();
+                    clientlist = JsonConvert.DeserializeObject<clients[]>(contentrespose);
+                    StateHasChanged();
+                }
+                else
+                {
+                    Snackbar.Configuration.PositionClass = "Center";
+                    Snackbar.Add($"Warning: {response.StatusCode}", Severity.Warning);
+                    StateHasChanged();
+                }
+            }
+        }
+
+    }
+
+    private async Task Add()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add("_client", new clients());
+        var dialog = await Dialog.Show<AddClient>("ADD CLIENT", parameters).Result;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+
+            await GetClient();
+            await InvokeAsync(() => StateHasChanged());
+        }
+    }
+
+    public async Task GetClient()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.SendAsync("SendClient");
+        }
+
+        try
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                client.BaseAddress = new Uri($"{NavigationManager.BaseUri}");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await localStorage.GetItemAsStringAsync("token"));
+                HttpResponseMessage response = await client.GetAsync($"api/Client/Clients");
+                if (response.IsSuccessStatusCode)
+                {
+                    string contentrespose = await response.Content.ReadAsStringAsync();
+                    clientlist = JsonConvert.DeserializeObject<clients[]>(contentrespose);
+                    await InvokeAsync(() => StateHasChanged());
+                }
+                else
+                {
+                    Snackbar.Configuration.PositionClass = "Center";
+                    Snackbar.Add($"Warning: {response.StatusCode}", Severity.Warning);
+                    await InvokeAsync(() => StateHasChanged());
+                }
+
+            }
+        }
+        catch (Exception ex)
+        {
+            //
+        }
+
+    }
+}
